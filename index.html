@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roadster Lift-Off: how Tesla's "flying car" works</title>
+<style>
+:root{--bg:#070b16;--panel:#0f1730;--ink:#e8eefc;--mute:#8d9bbd;--red:#e31937;--ice:#7fe3ff;--gold:#ffc857}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Segoe UI",system-ui,sans-serif}
+header{position:relative;height:100vh;min-height:560px;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.hero{position:absolute;left:5vw;top:9vh;max-width:560px;z-index:2}
+h1{font-size:clamp(2.2rem,6vw,4.6rem);line-height:1;margin:0 0 .4em;letter-spacing:-.03em}
+h1 b{color:var(--red)}
+.hero p{color:var(--mute);margin:0 0 1.2em}
+.ctl{position:absolute;right:4vw;bottom:5vh;z-index:2;background:#0f1730cc;backdrop-filter:blur(8px);border:1px solid #243058;border-radius:14px;padding:16px 18px;width:min(330px,90vw)}
+.ctl label{display:flex;justify-content:space-between;font-size:.85rem;color:var(--mute);margin-top:8px}
+.ctl input[type=range]{width:100%;accent-color:var(--red)}
+button{background:var(--red);color:#fff;border:0;border-radius:10px;padding:12px 18px;font:600 1rem inherit;cursor:pointer;margin-top:12px;width:100%;transition:transform .15s,box-shadow .15s}
+button:hover{transform:translateY(-2px);box-shadow:0 8px 24px #e3193766}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+main{max-width:1000px;margin:0 auto;padding:60px 20px}
+h2{font-size:2rem;margin:2.2em 0 .4em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:20px 0}
+.stat{background:var(--panel);border:1px solid #1c2748;border-radius:12px;padding:16px}
+.stat b{display:block;font-size:1.9rem;color:var(--ice)}.stat span{color:var(--mute);font-size:.85rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.card{background:var(--panel);border-left:4px solid var(--red);padding:16px 20px;border-radius:0 12px 12px 0}
+.card h3{margin:.1em 0}.card p{color:var(--mute);margin:.3em 0}
+code,.eq{font-family:Consolas,monospace;color:var(--gold)}
+.eq{background:#0b1226;padding:14px 18px;border-radius:10px;margin:10px 0;overflow-x:auto;white-space:pre}
+.row{display:grid;grid-template-columns:190px 1fr;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid #1c2748}
+.bar{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--red),var(--ice));width:0;transition:width 1.4s cubic-bezier(.2,.8,.2,1)}
+.row small{color:var(--mute);display:block}
+.note{color:var(--mute);font-size:.85rem}
+footer{text-align:center;color:var(--mute);padding:40px 20px;font-size:.85rem}
+@media(max-width:640px){.row{grid-template-columns:1fr}.hero{top:5vh}.ctl{position:relative;right:auto;bottom:auto;margin:60vh auto 0}}
+@media(prefers-reduced-motion:reduce){.bar{transition:none}}
+</style></head><body>
+<header>
+ <canvas id="cv" aria-label="Animated Tesla Roadster firing cold gas thrusters"></canvas>
+ <div class="hero"><h1>The Roadster that <b>leaves the ground.</b></h1>
+ <p>Tesla's second-generation Roadster uses SpaceX-derived cold gas thrusters to hop and flip. Change the numbers, fire the thrusters, and let a Java 21 server do the physics.</p></div>
+ <div class="ctl">
+  <label>Vehicle mass <span id="vm">1800 kg</span></label><input id="mass" type="range" min="1000" max="3000" step="50" value="1800">
+  <label>Gas on board <span id="vg">40 kg</span></label><input id="gas" type="range" min="5" max="150" value="40">
+  <label>Tank pressure <span id="vp">300 bar</span></label><input id="pbar" type="range" min="100" max="700" step="10" value="300">
+  <label>Thrust / weight <span id="vt">1.5</span></label><input id="twr" type="range" min="1.1" max="3" step=".1" value="1.5">
+  <label><span>Add a flip</span><input id="flip" type="checkbox" checked></label>
+  <button id="go">Fire thrusters</button>
+ </div>
+</header>
+<main>
+ <div class="grid" id="stats"></div>
+ <p class="note">Tesla has not published thruster specifications. These figures come from a textbook model of compressed air expanding through a nozzle, using the sliders above as assumptions.</p>
+
+ <h2>How it works</h2>
+ <div class="cols">
+  <div class="card"><h3>1. Store gas</h3><p>Air is compressed into a high-pressure tank. Pressure is stored energy, with no fire involved.</p></div>
+  <div class="card"><h3>2. Open the valve</h3><p>The gas rushes through a nozzle that turns pressure into speed, up to roughly 700 m/s.</p></div>
+  <div class="card"><h3>3. Newton pushes back</h3><p>Throwing gas down pushes the car up. Reports also describe a multi-mode suction system for grip and spin.</p></div>
+ </div>
+
+ <h2>The physics</h2>
+ <div class="eq">Thrust            F  = ṁ · vₑ
+Exhaust speed     vₑ = √( 2γ/(γ−1) · R·T · [1 − (pₑ/p₀)^((γ−1)/γ)] )
+Specific impulse  Isp = vₑ / g₀
+Rocket equation   Δv = vₑ · ln( m₀ / m_f )
+Hover time        t  = Isp · ln( m₀ / m_f )</div>
+ <p>To hover, thrust must equal weight, so a 1,800 kg car needs about 17.7 kN. Cold gas has a low exhaust speed, so it burns through gas fast. That is why the car only gets short hops, not a flight across town.</p>
+
+ <h2>Versus rockets and other flyers</h2>
+ <p>Bars show specific impulse for rockets and thrusters. Fuel efficiency in seconds: higher means more push per kilogram of propellant.</p>
+ <div id="cmp"></div>
+ <div class="cols" style="margin-top:30px">
+  <div class="card"><h3>Rocket science</h3><p>Combustion makes gas far hotter, so exhaust is faster and Isp is 4–5 times higher. Rockets also carry their oxidizer and work in space.</p></div>
+  <div class="card"><h3>Market reality</h3><p>Air taxis (eVTOL) are on the certification path with wings and electric rotors. Cold gas thrusters are a show-stopper, not a commuter.</p></div>
+  <div class="card"><h3>Hurdles</h3><p>Aviation rules, noise, safety, and energy cost. Musk himself said the car is not necessarily safety-optimized.</p></div>
+ </div>
+</main>
+<footer>Educational project · Java 21 · Tomcat 9 · Maven · figures are approximate</footer>
+<script>
+const $=i=>document.getElementById(i),cv=$('cv'),c=cv.getContext('2d');
+let W,H,stars=[],parts=[],sim=null,t0=0;
+function size(){W=cv.width=cv.clientWidth*devicePixelRatio;H=cv.height=cv.clientHeight*devicePixelRatio;
+ stars=Array.from({length:130},()=>({x:Math.random()*W,y:Math.random()*H*.8,r:Math.random()*1.6*devicePixelRatio+.4,p:Math.random()*6}))}
+addEventListener('resize',size);size();
+['mass','gas','pbar','twr'].forEach(k=>$(k).oninput=()=>{$({mass:'vm',gas:'vg',pbar:'vp',twr:'vt'}[k]).textContent=$(k).value+({mass:' kg',gas:' kg',pbar:' bar',twr:''}[k])});
+async function fire(){
+ const q=new URLSearchParams({mass:$('mass').value,gas:$('gas').value,pbar:$('pbar').value,twr:$('twr').value});
+ const d=await (await fetch('api/physics?'+q)).json();
+ sim=d;t0=performance.now();stat(d);
+}
+$('go').onclick=fire;
+function stat(d){$('stats').innerHTML=[[d.ve+' m/s','exhaust speed'],[d.isp+' s','specific impulse'],[d.thrustKN+' kN','liftoff thrust'],
+ [d.mdot+' kg/s','gas flow'],[d.burn+' s','thruster burn'],[d.hover+' s','max hover time'],[d.maxH+' m','peak height'],[d.deltaV+' m/s','delta-v']]
+ .map(s=>`<div class="stat"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('')}
+function car(x,y,a,s){c.save();c.translate(x,y);c.rotate(a);c.scale(s,s);
+ c.fillStyle='#e31937';c.beginPath();c.moveTo(-90,0);c.lineTo(-80,-18);c.quadraticCurveTo(-30,-22,-10,-42);c.quadraticCurveTo(30,-48,52,-20);c.lineTo(92,-12);c.quadraticCurveTo(100,-4,92,6);c.lineTo(-90,6);c.closePath();c.fill();
+ c.fillStyle='#9fe8ff';c.beginPath();c.moveTo(-18,-22);c.quadraticCurveTo(0,-36,24,-36);c.quadraticCurveTo(40,-30,46,-20);c.closePath();c.fill();
+ c.fillStyle='#111';[-52,56].forEach(w=>{c.beginPath();c.arc(w,6,17,0,7);c.fill();c.fillStyle='#889';c.beginPath();c.arc(w,6,7,0,7);c.fill();c.fillStyle='#111'});c.restore()}
+function frame(now){
+ const dpr=devicePixelRatio,g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,'#04060f');g.addColorStop(1,'#16224a');c.fillStyle=g;c.fillRect(0,0,W,H);
+ stars.forEach(s=>{c.globalAlpha=.4+.6*Math.abs(Math.sin(now/900+s.p));c.fillStyle='#fff';c.fillRect(s.x,s.y,s.r,s.r)});c.globalAlpha=1;
+ const gy=H*.86;c.fillStyle='#0b1226';c.fillRect(0,gy,W,H-gy);c.fillStyle='#243058';c.fillRect(0,gy,W,2*dpr);
+ const cx=W*.42,sc=1.25*dpr;let h=0,ang=0,burning=false;
+ if(sim){const t=(now-t0)/1000,tr=sim.traj;
+  if(t<=sim.flight){let i=0;while(i<tr.length-2&&tr[i+1][0]<t)i++;const a=tr[i],b=tr[Math.min(i+1,tr.length-1)],k=b[0]>a[0]?(t-a[0])/(b[0]-a[0]):0;h=a[1]+(b[1]-a[1])*k;
+   burning=t<sim.burn;if($('flip').checked)ang=-Math.PI*2*Math.min(1,t/sim.flight)}else sim=Object.assign(sim,{done:1})}
+ const px=(gy-90*dpr)/Math.max(sim?sim.maxH:3,3)*.8,y=gy-17*dpr*1.25-h*px;
+ if(burning)for(let i=0;i<8;i++)[-52,56].forEach(w=>parts.push({x:cx+w*sc*Math.cos(ang),y:y+6*sc,vx:(Math.random()-.5)*3*dpr,vy:(4+Math.random()*5)*dpr,l:1}));
+ parts=parts.filter(p=>p.l>0);parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.l-=.035;c.globalAlpha=Math.max(p.l,0)*.8;c.fillStyle=p.l>.6?'#fff':'#7fe3ff';c.beginPath();c.arc(p.x,Math.min(p.y,gy),(1-p.l)*9*dpr+2,0,7);c.fill()});c.globalAlpha=1;
+ car(cx,y,ang,sc);requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+fetch('api/physics').then(r=>r.json()).then(stat);
+fetch('api/compare').then(r=>r.json()).then(a=>{const mx=Math.max(...a.map(x=>x.isp));
+ $('cmp').innerHTML=a.map(x=>`<div class="row"><div><b>${x.name}</b><small>${x.kind}</small></div><div><div class="bar" data-w="${x.isp?x.isp/mx*100:8}"></div><small>${x.isp?'Isp ≈ '+x.isp+' s':'Uses air for lift, no Isp'} · ${x.note}</small></div></div>`).join('');
+ const io=new IntersectionObserver(e=>{if(e[0].isIntersecting){document.querySelectorAll('.bar').forEach(b=>b.style.width=b.dataset.w+'%');io.disconnect()}});io.observe($('cmp'))});
+</script></body></html>
